@@ -1,0 +1,36 @@
+{
+  "name": "forgeflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForgeFlow - Real-time perps strategy automation & copy trading on FlashTrade powered by MagicBlock Ephemeral Rollups. Solana Blitz v5 Hackathon project.",
+  "workspaces": [
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend",
+    "build:program": "cd programs/flashforge && cargo build-sbf",
+    "test": "npm run test --workspace=frontend",
+    "lint": "npm run lint --workspace=frontend",
+    "clean": "rm -rf node_modules frontend/node_modules frontend/.next target programs/flashforge/target",
+    "setup:clis": "echo 'Install: sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\" && avm install latest && avm use 1.0.2'",
+    "hack:info": "cat README.md | head -100"
+  },
+  "keywords": [
+    "solana",
+    "magicblock",
+    "ephemeral-rollups",
+    "flash-trade",
+    "perps",
+    "defi",
+    "real-time",
+    "hackathon"
+  ],
+  "author": "ForgeFlow Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/forgeflow"
+  }
+}

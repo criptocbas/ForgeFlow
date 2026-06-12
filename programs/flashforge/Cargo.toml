@@ -1,0 +1,24 @@
+[package]
+name = "flashforge"
+version = "0.1.0"
+description = "ForgeFlow - Strategy & copy-trading execution engine using MagicBlock Ephemeral Rollups on FlashTrade perps. Solana Blitz v5."
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "flashforge"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.0"  # Aligns with current examples (1.0.x series); adjust per your Anchor version
+ephemeral-rollups-sdk = { version = "0.15", features = ["anchor"] }  # Latest as of research; pin exact after testing
+
+# Add other deps as needed (e.g. for token, VRF later)
+# spl-token = { version = "^4", features = ["no-entrypoint"] }
