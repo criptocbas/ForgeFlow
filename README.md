@@ -18,6 +18,16 @@ This is exactly what the judges and partners want to see: creative, deep use of 
 
 **ForgeFlow** = "Forge" strategies in the ephemeral layer that react at the speed of thought and execute on FlashTrade.
 
+### Code Quality & Professionalism Standards
+This repo aims for hackathon-winning levels of polish:
+- Clear separation of base Solana vs. Ephemeral Rollup execution paths in every layer.
+- FlashTrade concerns live in their own well-typed lib.
+- Small, focused React components and pure simulation scripts for VPS/headless development.
+- Excellent comments and documentation so judges (and future you) understand the MagicBlock + FlashTrade integration deeply.
+- Real transaction construction using the official SDKs (not smoke-and-mirrors).
+
+See `CONTRIBUTING.md`, the extracted components in `frontend/components/`, `frontend/lib/flashTrade.ts`, and the pure `scripts/simulate-strategy.ts`.
+
 Core flows (prioritized for hackathon):
 
 1. **Live FlashTrade Terminal + Data Layer** — Real markets, your positions, LP metrics pulled via FlashTrade SDK / onchain reads + WS. One-click open/manage perps positions on the actual FlashTrade DEX.

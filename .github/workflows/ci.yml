@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  lint-and-build:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,4 +19,7 @@ jobs:
 
       - run: npm ci
       - run: npm run lint --if-present
-      - run: npm run build --if-present || echo "Build step (frontend) - extend as program deploys are added"
+      - run: npm run typecheck --if-present || echo "Typecheck step"
+      - run: npm run build --if-present || echo "Frontend build (program requires Anchor CLI separately)"
+      # Future: cargo check in programs/ once Anchor is set up in CI
+

@@ -146,6 +146,30 @@ pub mod flashforge {
     // - private/permissioned variant (see pinocchio-private-counter and private-counter examples)
     // - VRF for randomized strategy triggers if useful
     // - Magic Actions example to trigger base-layer FlashTrade actions from inside ER
+
+    /// Stub for executing strategy logic that ultimately affects FlashTrade positions.
+    /// In a production version this could contain the "brain" that decides sizing/risk
+    /// and then either emits events or uses Magic Actions / client-built txs to interact
+    /// with the FlashTrade program (FLASH6Lo6h3iasJKWDs2F8TkW2UKf3s15C8PMGuVfgBn).
+    ///
+    /// While the account is delegated, this runs with ER speed.
+    pub fn execute_strategy(ctx: Context<ExecuteStrategy>, signal: u8) -> Result<()> {
+        let strategy = &mut ctx.accounts.strategy;
+
+        // Example: record that a decision was made at ER speed.
+        strategy.last_execution_slot = Clock::get()?.slot;
+
+        msg!(
+            "Strategy execution signal {} processed in ER (could drive FlashTrade position adjustment)",
+            signal
+        );
+
+        // Real implementation would likely:
+        // - Read current FlashTrade state (or be fed it)
+        // - Apply delegated strategy params (copy %, sl, etc.)
+        // - Either commit a new desired position or emit an event the off-chain executor watches
+        Ok(())
+    }
 }
 
 /// Accounts for initialize_strategy
@@ -226,6 +250,15 @@ pub struct CommitStrategy<'info> {
     /// CHECK: delegation program
     pub delegation_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ExecuteStrategy<'info> {
+    #[account(mut)]
+    pub strategy: Account<'info, StrategyConfig>,
+
+    // In a real system this signer might be a crank, permissioned executor, or the owner.
+    pub executor: Signer<'info>,
 }
 
 /// The core onchain state for a user's strategy / copy mirror config.

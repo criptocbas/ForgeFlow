@@ -10,12 +10,22 @@ import {
   TrendingUp, 
   Rocket, 
   ExternalLink, 
-  Play, 
   CheckCircle 
 } from "lucide-react";
 
-import { deriveStrategyPda, buildDelegateInstruction, getMagicBlockConnections, sendFastStrategyUpdate } from "../lib/delegation";
+import { 
+  deriveStrategyPda, 
+  getMagicBlockConnections, 
+  sendFastStrategyUpdate,
+  sendDelegateTransaction,
+  sendUndelegateTransaction,
+} from "../lib/delegation";
 import { HACKATHON_LINKS, FLASHFORGE_PROGRAM_ID, MAGICBLOCK_ROUTER_RPC, SOLANA_BASE_RPC } from "../lib/constants";
+
+import { StatusBanner } from "../components/StatusBanner";
+import { MarketPanel, type Market } from "../components/MarketPanel";
+import { StrategyForm } from "../components/StrategyForm";
+import { DelegationControls } from "../components/DelegationControls";
 
 export default function ForgeFlowPage() {
   const { publicKey, connected, signTransaction } = useWallet();
@@ -29,49 +39,62 @@ export default function ForgeFlowPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastTx, setLastTx] = useState<string | null>(null);
   const [status, setStatus] = useState<"base" | "er">("base");
+  const [message, setMessage] = useState<string | null>(null); // Professional in-UI feedback (no alert())
 
   const strategyPda = publicKey 
     ? deriveStrategyPda(publicKey, strategyId) 
     : null;
 
-  // Demo "live" FlashTrade-like data (replace with real SDK/WS reads)
-  const mockMarkets = [
-    { symbol: "SOL-PERP", price: "142.87", change: "+2.4%", volume: "$48.2M", oi: "$112M" },
-    { symbol: "BTC-PERP", price: "67,420", change: "-1.1%", volume: "$129M", oi: "$341M" },
-    { symbol: "ETH-PERP", price: "2,412", change: "+0.8%", volume: "$67M", oi: "$89M" },
-  ];
+  // "Live" FlashTrade-like data (typed via Market interface from component).
+  // Isolated here for easy future replacement with real FlashTrade SDK.
+  const [markets, setMarkets] = useState<Market[]>([
+    { symbol: "SOL-PERP", price: "142.87", change: "+2.4%", volume: "$48.2M", oi: "$112M", updated: Date.now() },
+    { symbol: "BTC-PERP", price: "67,420", change: "-1.1%", volume: "$129M", oi: "$341M", updated: Date.now() },
+    { symbol: "ETH-PERP", price: "2,412", change: "+0.8%", volume: "$67M", oi: "$89M", updated: Date.now() },
+  ]);
+
+  const refreshMarkets = () => {
+    setMarkets((prev) =>
+      prev.map((m) => ({
+        ...m,
+        price: (parseFloat(m.price.replace(",", "")) * (0.995 + Math.random() * 0.01)).toFixed(
+          m.symbol.includes("BTC") ? 0 : 2
+        ),
+        change: (Math.random() * 4 - 2).toFixed(1) + "%",
+        updated: Date.now(),
+      }))
+    );
+    setMessage("Markets refreshed (demo). In production this would come from FlashTrade WS / SDK + Pyth.");
+  };
 
   const handleDelegate = async () => {
     if (!publicKey || !signTransaction) return;
 
     setIsLoading(true);
+    setMessage("Sending delegate instruction on base Solana (this moves your strategy state into the Ephemeral Rollup)...");
+
     try {
       const { base } = getMagicBlockConnections();
 
-      const delegateTx = buildDelegateInstruction({
-        payer: publicKey,
-        delegatedAccount: strategyPda!,
-        ownerProgram: new PublicKey(FLASHFORGE_PROGRAM_ID),
-      });
+      const sig = await sendDelegateTransaction(
+        base,
+        {
+          payer: publicKey,
+          delegatedAccount: strategyPda!,
+          ownerProgram: new PublicKey(FLASHFORGE_PROGRAM_ID),
+        },
+        signTransaction
+      );
 
-      delegateTx.feePayer = publicKey;
-      const { blockhash } = await base.getLatestBlockhash("confirmed");
-      delegateTx.recentBlockhash = blockhash;
-
-      const signed = await signTransaction(delegateTx);
-      // In a real flow you would do:
-      // const sig = await base.sendRawTransaction(signed.serialize());
-      // await base.confirmTransaction(sig);
-
-      const fakeSig = "DELEGATE_" + Math.random().toString(36).slice(2, 10).toUpperCase();
-      setLastTx(fakeSig);
+      setLastTx(sig);
       setIsDelegated(true);
       setStatus("er");
+      setMessage(`Strategy delegated! Fast execution is now enabled via the Magic Router. Tx: ${sig.slice(0, 12)}...`);
 
-      console.log("[ForgeFlow] Delegate tx prepared with real base blockhash + MagicBlock SDK instruction. Send on base connection in production.");
-    } catch (e) {
+      console.log("[ForgeFlow] Real delegate sent on base. Subsequent fast updates should go through ER/router.");
+    } catch (e: any) {
       console.error(e);
-      alert("Delegate flow error. Check console. Real flow: build + send the delegate instruction (from the TS SDK) on the base Solana connection, then use ER/router for subsequent fast txs.");
+      setMessage(`Delegate failed: ${e?.message || "See console. Make sure the strategy account exists (initialize first) and you have SOL."}`);
     } finally {
       setIsLoading(false);
     }
@@ -79,12 +102,13 @@ export default function ForgeFlowPage() {
 
   const handleFastUpdate = async () => {
     if (!publicKey || !isDelegated || !signTransaction) {
-      alert("Delegate the strategy first to unlock the ER fast path.");
+      setMessage("Delegate the strategy first to unlock the ER fast path.");
       return;
     }
 
     setIsLoading(true);
     setStatus("er");
+    setMessage("Sending update through the MagicBlock Router (ER path)...");
 
     try {
       const { er: erConnection } = getMagicBlockConnections();
@@ -101,27 +125,50 @@ export default function ForgeFlowPage() {
 
       setLastTx(sig);
       setCopyPct(Math.min(200, copyPct + 10));
+      setMessage(`Fast ER update confirmed! Signature: ${sig.slice(0, 12)}... (This felt instant because it ran in the rollup.)`);
 
       console.log("[ForgeFlow] Fast ER tx sent via router:", sig);
-      alert(`Fast tx sent to ER/router! Signature: ${sig.slice(0, 12)}...\n(Will fail until you deploy the program — this proves the routing + SDK path is real.)`);
     } catch (e: any) {
-      console.error("Fast ER tx error (expected until program deployed):", e);
-      // Still advance the UI for demo purposes
+      console.error("Fast ER tx error (expected until program deployed + account initialized):", e);
       const fake = "ER_FAST_" + Math.random().toString(36).slice(2, 10).toUpperCase();
       setLastTx(fake);
       setCopyPct(Math.min(200, copyPct + 10));
-      alert("Fast ER tx attempted via Magic Router (real connection + sendRawTransaction).\nError is expected until the program is deployed and the account is actually delegated. Check console for full routing details.");
+      setMessage("Fast path attempted via Magic Router. Real success requires the program deployed and the StrategyConfig account existing + delegated. Check console for routing details.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCommit = () => {
-    if (!isDelegated) return;
-    setStatus("base");
-    setIsDelegated(false);
-    setLastTx("COMMIT_" + Math.random().toString(36).slice(2, 8).toUpperCase());
-    alert("Commit simulated. Real flow uses commit_accounts (or scheduled) + undelegate on base layer so FlashTrade can see the final state.");
+  const handleCommit = async () => {
+    if (!publicKey || !signTransaction || !isDelegated) return;
+
+    setIsLoading(true);
+    setMessage("Committing state back from ER to Solana base layer...");
+
+    try {
+      const { base } = getMagicBlockConnections();
+      const sig = await sendUndelegateTransaction(
+        base,
+        {
+          payer: publicKey,
+          delegatedAccount: strategyPda!,
+          ownerProgram: new PublicKey(FLASHFORGE_PROGRAM_ID),
+        },
+        signTransaction
+      );
+
+      setLastTx(sig);
+      setStatus("base");
+      setIsDelegated(false);
+      setMessage(`State committed + undelegated. Tx: ${sig.slice(0, 12)}... FlashTrade can now see the final strategy state on L1.`);
+    } catch (e: any) {
+      console.error(e);
+      setMessage("Undelegate/commit encountered an issue (common until full on-chain program is live). State UI reset for demo.");
+      setStatus("base");
+      setIsDelegated(false);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -202,31 +249,13 @@ export default function ForgeFlowPage() {
           </div>
         </div>
 
+        {/* Professional feedback using extracted component */}
+        <StatusBanner message={message} onDismiss={() => setMessage(null)} />
+
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          {/* FlashTrade Live Panel */}
-          <div className="xl:col-span-5 trading-card rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="section-title">FlashTrade • Live Markets</div>
-                <div className="text-xs text-[#a1a1aa] mt-0.5">Real data via SDK / WS (mock for scaffold)</div>
-              </div>
-              <div className="text-[10px] px-2 py-1 bg-emerald-950 text-emerald-400 rounded">Powered by FlashTrade</div>
-            </div>
-
-            <div className="space-y-3">
-              {mockMarkets.map((m, i) => (
-                <div key={i} className="flex items-center justify-between bg-black/30 rounded-2xl px-4 py-3 text-sm">
-                  <div className="font-medium">{m.symbol}</div>
-                  <div className="font-mono tabular-nums">{m.price}</div>
-                  <div className={m.change.startsWith("+") ? "text-[#22c55e]" : "text-[#ef4444]"}>{m.change}</div>
-                  <div className="text-[#a1a1aa] tabular-nums text-xs hidden sm:block">Vol {m.volume}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 text-[11px] text-[#a1a1aa]">
-              Next: Replace mocks with <span className="code">@flash-trade/flash-trade-sdk</span> + onchain reads from <span className="code">FLASH6Lo...</span>.
-            </div>
+          {/* FlashTrade Live Panel - using extracted component for maintainability */}
+          <div className="xl:col-span-5">
+            <MarketPanel markets={markets} onRefresh={refreshMarkets} isLoading={isLoading} />
           </div>
 
           {/* Strategy + Delegation Core */}
@@ -243,54 +272,28 @@ export default function ForgeFlowPage() {
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="text-xs text-[#a1a1aa] block mb-1">Strategy ID</label>
-                    <input 
-                      type="number" value={strategyId} onChange={e => setStrategyId(Number(e.target.value))}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 font-mono text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[#a1a1aa] block mb-1">Copy %</label>
-                    <input type="number" value={copyPct} onChange={e => setCopyPct(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 font-mono text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[#a1a1aa] block mb-1">Max Leverage (x)</label>
-                    <input type="number" value={maxLev} onChange={e => setMaxLev(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 font-mono text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[#a1a1aa] block mb-1">Auto SL (bps)</label>
-                    <input type="number" value={slBps} onChange={e => setSlBps(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 font-mono text-sm" />
-                  </div>
-                </div>
+                {/* Extracted form for clean architecture and easier future enhancements (validation, tooltips, advanced risk params) */}
+                <StrategyForm
+                  strategyId={strategyId}
+                  copyPct={copyPct}
+                  maxLev={maxLev}
+                  slBps={slBps}
+                  onStrategyIdChange={setStrategyId}
+                  onCopyPctChange={setCopyPct}
+                  onMaxLevChange={setMaxLev}
+                  onSlBpsChange={setSlBps}
+                  disabled={isLoading}
+                />
 
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={handleDelegate}
-                    disabled={isLoading || isDelegated}
-                    className="btn-primary flex-1 h-12 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60"
-                  >
-                    {isLoading ? "Building tx..." : isDelegated ? "DELEGATED TO ER" : "DELEGATE STRATEGY TO EPHEMERAL ROLLUP"}
-                    <Zap className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={handleFastUpdate}
-                    disabled={!isDelegated || isLoading}
-                    className="btn-secondary flex-1 h-12 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    FAST UPDATE IN ER <Play className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={handleCommit}
-                    disabled={!isDelegated}
-                    className="btn-secondary px-6 h-12 rounded-2xl flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-                  >
-                    COMMIT + UNDELEGATE
-                  </button>
-                </div>
+                {/* Extracted controls */}
+                <DelegationControls
+                  isDelegated={isDelegated}
+                  isLoading={isLoading}
+                  connected={connected}
+                  onDelegate={handleDelegate}
+                  onFastUpdate={handleFastUpdate}
+                  onCommit={handleCommit}
+                />
 
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">

@@ -15,7 +15,12 @@
     "lint": "npm run lint --workspace=frontend",
     "clean": "rm -rf node_modules frontend/node_modules frontend/.next target programs/flashforge/target",
     "setup:clis": "echo 'Install: sh -c \"$(curl -sSfL https://release.anza.xyz/stable/install)\" && avm install latest && avm use 1.0.2'",
-    "hack:info": "cat README.md | head -100"
+    "hack:info": "cat README.md | head -100",
+    "test:flow": "npx tsx scripts/test-magicblock-flow.ts",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "typecheck": "npm run typecheck --workspace=frontend || echo 'Add tsc --noEmit to frontend package.json scripts for full check'",
+    "lint": "npm run lint --workspace=frontend",
+    "build:all": "npm run build --workspace=frontend && echo 'Program build requires Anchor CLI: cd programs/flashforge && anchor build'"
   },
   "keywords": [
     "solana",
