@@ -48,6 +48,33 @@ Client code pattern (base vs ER providers) is shown in every official example an
 8. Record a crisp 60-90s video showing delegation → ER speed → FlashTrade context.
 9. Submit + celebrate.
 
+## Architecture Diagram (Mermaid)
+
+```mermaid
+flowchart TD
+    User[User / Agent via Frontend] -->|Wallet tx + FlashTrade SDK| FT[FlashTrade Live Perps DEX<br/>Pool-to-peer, zero slippage]
+    FT -->|Real-time data via REST/WS or SDK| FE[Next.js Frontend<br/>Markets, Positions, Strategy UI]
+    
+    FE -->|1. Initialize + Delegate| Base[Solana Base Layer<br/>api.devnet.solana.com]
+    Base -->|Delegate CPI via MagicBlock SDK| ER[Ephemeral Rollup<br/>devnet-router.magicblock.app<br/>sub-50ms, low cost]
+    
+    ER -->|Fast reactive logic| Strategy[Delegated StrategyConfig<br/>copy %, risk rules, mirroring]
+    Strategy -->|update_params / execute_strategy| ER
+    ER -->|Commit / Magic Action| Base
+    
+    Base -->|Atomic settlement| FT
+    Strategy -->|Optional PER TEE| Private[Private Ephemeral Rollup<br/>Hidden strategies, MEV protection]
+    
+    subgraph "Key Best Practices"
+        BP1[Deep delegation in execution loop]
+        BP2[Clear base vs ER connection separation]
+        BP3[FlashTrade integration for +50% prize]
+        BP4[ER for speed + PER for privacy edge]
+    end
+```
+
+This diagram + the code in `lib/delegation.ts`, `lib/flashTrade.ts`, and `programs/flashforge` should make the integration obvious to judges and partners.
+
 ## Resources (duplicated from root README for convenience)
 See root README.md for the master list. The most important during coding:
 - https://github.com/magicblock-labs/magicblock-engine-examples (clone and run the anchor-counter)
